@@ -1,0 +1,198 @@
+// app/page.tsx
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+
+export default function Home() {
+  const [query, setQuery] = useState('');
+  const [books, setBooks] = useState([]);
+  const [error, setError] = useState('');
+
+  const searchBooks = async () => {
+    setError('');
+    const res = await fetch(`/api/search?query=${query}`);
+    const data = await res.json();
+    if (data.error) setError(data.error);
+    else setBooks(data);
+  };
+
+  return (
+    <div className="p-4 max-w-xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Book Search</h1>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="border p-2 w-full mb-2"
+        placeholder="Search book title..."
+      />
+      <button
+        onClick={searchBooks}
+        className="bg-blue-500 text-white px-4 py-2 rounded mb-4"
+      >
+        Search
+      </button>
+      {error && <p className="text-red-500">{error}</p>}
+      <ul>
+        {books.map((book: any, index) => (
+          <li key={index} className="mb-2">
+            <Link href={`/book/${book.id}`} className="text-blue-700 underline">
+              {book.title}
+            </Link>{' '}
+            by {book.author}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// app/book/[id]/page.tsx
+import books from '../../../data/books.json';
+
+export default function BookDetails({ params }: { params: { id: string } }) {
+  const book = books.find((b) => b.id === params.id);
+
+  if (!book) return <div className="p-4">Book not found</div>;
+
+  return (
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-2">{book.title}</h1>
+      <p className="mb-2">Author: {book.author}</p>
+      <img src={book.image || '/placeholder.jpg'} alt={book.title} className="w-48" />
+    </div>
+  );
+}
+
+// pages/api/search.ts
+import { NextApiRequest, NextApiResponse } from 'next';
+import books from '../../data/books.json';
+
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { query } = req.query;
+
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'Invalid query' });
+  }
+
+  const results = books.filter(
+    (book) =>
+      book.title.toLowerCase().includes(query.toLowerCase()) ||
+      book.author.toLowerCase().includes(query.toLowerCase())
+  );
+
+  if (results.length === 0) return res.status(404).json({ error: 'No results found' });
+
+  res.status(200).json(results);
+}
+
+// app/add-book/page.tsx
+'use client';
+
+import { useState } from 'react';
+
+export default function AddBook() {
+  const [formData, setFormData] = useState({ title: '', author: '', image: '' });
+  const [message, setMessage] = useState('');
+
+  const handleChange = (e: any) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e: any) => {
+    e.preventDefault();
+    const res = await fetch('/api/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData),
+    });
+    const data = await res.json();
+    setMessage(data.message || data.error);
+  };
+
+  return (
+    <div className="p-4 max-w-md mx-auto">
+      <h1 className="text-xl font-bold mb-4">Add New Book</h1>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+        <input
+          type="text"
+          name="title"
+          value={formData.title}
+          onChange={handleChange}
+          placeholder="Book Title"
+          className="border p-2"
+        />
+        <input
+          type="text"
+          name="author"
+          value={formData.author}
+          onChange={handleChange}
+          placeholder="Author"
+          className="border p-2"
+        />
+        <input
+          type="text"
+          name="image"
+          value={formData.image}
+          onChange={handleChange}
+          placeholder="Image URL"
+          className="border p-2"
+        />
+        <button type="submit" className="bg-green-600 text-white p-2 rounded">
+          Add Book
+        </button>
+        {message && <p className="text-blue-600 mt-2">{message}</p>}
+      </form>
+    </div>
+  );
+}
+
+// pages/api/add.ts
+import fs from 'fs';
+import path from 'path';
+import { NextApiRequest, NextApiResponse } from 'next';
+import { v4 as uuidv4 } from 'uuid';
+
+const filePath = path.join(process.cwd(), 'data', 'books.json');
+
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { title, author, image } = req.body;
+
+  if (!title || !author) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const newBook = {
+    id: uuidv4(),
+    title,
+    author,
+    image: image || '',
+  };
+
+  const books = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  books.push(newBook);
+  fs.writeFileSync(filePath, JSON.stringify(books, null, 2));
+
+  res.status(200).json({ message: 'Book added successfully' });
+}
+
+// data/books.json
+[
+  {
+    "id": "1",
+    "title": "The Great Gatsby",
+    "author": "F. Scott Fitzgerald",
+    "image": ""
+  },
+  {
+    "id": "2",
+    "title": "To Kill a Mockingbird",
+    "author": "Harper Lee",
+    "image": ""
+  }
+]
